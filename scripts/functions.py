@@ -1,25 +1,15 @@
 import os
 import config as config
 import createCSV as createCSV
-import time
-from functools import wraps
 import pandas as pd
 import summary as summary_func
 import shutil
 import plots as plots
 import database as database_func
-
+import utils as utils_func
+import dict_filter as dict_filter
 # Decorator to calculate the execution time of a function
-def calculate_time(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        end_time = time.time()
-        print(
-            f"Execution time for {func.__name__}: {end_time - start_time} seconds")
-        return result
-    return wrapper
+
 
 def clearFolders():
     if (os.path.exists(config.TEST_PATH)):
@@ -48,7 +38,8 @@ def createTestFolders():
     else:
         print("Creating test_data folder")
         os.mkdir(config.TEST_PATH)
-        calculate_time(createCSV.createData)(config.NUM_TEST_FILES,config.SIZE_TEST_FILES, config.TEST_PATH)
+        utils_func.calculate_time(createCSV.createData)(
+            config.NUM_TEST_FILES, config.SIZE_TEST_FILES, config.TEST_PATH)
 
 
 def createDummiesFolders():
@@ -57,87 +48,106 @@ def createDummiesFolders():
     else:
         print("Creating dummies_data folder")
         os.mkdir(config.DUMMIES_PATH)
-        calculate_time(createCSV.createData)(config.NUM_DUMMIES_FILES,config.SIZE_DUMMIES_FILES, config.DUMMIES_PATH)
-
-
+        utils_func.calculate_time(createCSV.createData)(
+            config.NUM_DUMMIES_FILES, config.SIZE_DUMMIES_FILES, config.DUMMIES_PATH)
 
 
 # Now we will define the functions that use a path with the data and
 
 
-def count_ones(path, output_file_name):
+def summary_count_ones(path, output_file_name):
     print("Creating summary file " + output_file_name + " in " + path)
-    failed_files = calculate_time(summary_func.count_ones)(path, output_file_name)
-    print(len(os.listdir(path))-len(failed_files),
-          "files processed successfully")
-    if failed_files:
-        print("Failed files: "+str(failed_files))
-    else:
-        print("No failed files")
-    print(output_file_name, "created")
+    failed_files = utils_func.calculate_time(
+        summary_func.summary_count_ones)(path, output_file_name)
+    print("Failed files: "+str(failed_files))
 
 
-def count_ones_multithread(path, output_file_name):
-    print("Creating summary file multithread " +
-          output_file_name + " in " + path)
-    failed_files = calculate_time(summary_func.count_ones_multithread)(path, output_file_name)
-    print(len(os.listdir(path))-len(failed_files),
-          "files processed successfully")
-    if failed_files:
-        print("Failed files: "+str(failed_files))
-    else:
-        print("No failed files")
-    print(output_file_name, "created")
-
-
-def plot_ones(path, ones_csv):
+def plot_ones(ones_csv, filter_name=None):
+    path = config.CSV_PATH
     if not os.path.exists(path):
         print("Error: path does not exist")
         return
     print("Plotting ones from " + ones_csv + " in " + path)
-    df = pd.read_csv(os.path.join(path, ones_csv))
+    try:
+        df = pd.read_csv(os.path.join(path, ones_csv))
+        print("Read csv file successfully")
+    except Exception as e:
+        print("Error reading csv file: "+str(e))
+        return
+
+    if filter_name:
+        filter = dict_filter.getFilter(filter_name)
+        print("Using filter", filter_name)
+        df = df[df['name'].isin(filter)]
+        print("Filter", filter_name, "applied")
+
+    print(df.columns)
     plots.plot_ones(df)
     print("Plot created")
 
 
-def testVelocity():
-    calculate_time(count_ones)(config.TEST_PATH, "test_summary.csv")
+def restartFilter(folder_path):
+    print("Restarting filter in "+folder_path)
+    dict_filter.restartFilter(folder_path)
+    print("Filter restarted")
 
 
-def filterFiles(path, ones_csv, output_file_name):
-    if not os.path.exists(path):
-        print("Error: path does not exist")
+def AddFilterOnes(csv_file):
+    print("Adding filter of ones in from "+csv_file)
+    try:
+        df = pd.read_csv(os.path.join(config.CSV_PATH, csv_file))
+    except Exception as e:
+        print("Error reading csv file: "+str(e))
         return
-    print("Filtering files from " + ones_csv + " in " + path)
-    df = pd.read_csv(os.path.join(path, ones_csv))
-    df = df.drop(df.columns[0], axis=1)
-    df = df[df['ones'] > 0]
-    df.to_csv(output_file_name)
-    print("Filter created in "+output_file_name)
+    # Filter the ones
+    df_temp = df[df['ones'] > 0]
+    # Add the filter
+    dict_filter.addFilter(df_temp, "onlyOnes")
+    # Filter the zeros
+    df_temp = df[df['ones'] == 0]
+    dict_filter.addFilter(df_temp, "onlyZeros")
+    # Filter the zeros
 
 
-def redundance(path_folder, filtered_csv, output_file_name):
+def summaryRedundance(path_folder, output_file_name):
     if not os.path.exists(path_folder):
         print("Error: path does not exist")
         return
     print("Creating "+output_file_name+" as output")
-    print("Calculating redundance from in " + path_folder)
-    print("Using "+filtered_csv+" as filter")
-    calculate_time(summary_func.redundance_in_folder)(path_folder, filtered_csv, output_file_name)
+    print("Calculating redundance in "+path_folder)
+    utils_func.calculate_time(summary_func.summary_redundance)(
+        path_folder, output_file_name)
     print("Redundance calculated")
 
+def summaryRedundanceCounts(path_folder, output_file_name):
+    if not os.path.exists(path_folder):
+        print("Error: path does not exist")
+        return
+    print("Creating "+output_file_name+" as output")
+    print("Calculating redundance counts in "+path_folder)
+    utils_func.calculate_time(summary_func.summary_redundance_counts)(
+        path_folder, output_file_name)
+    print("Redundance counts calculated")
 
-def plotRedundance(base_path, redundance_csv):
-    print("Plotting redundance from " + redundance_csv+ " in " + base_path)
-    df = pd.read_csv(os.path.join(base_path, redundance_csv))
+
+def plotRedundance(redundance_csv):
+    print("Plotting redundance from " +
+          redundance_csv + " in " + config.CSV_PATH)
+    df = pd.read_csv(os.path.join(config.CSV_PATH, redundance_csv))
     plots.plotRedundance(df)
     print("Plot created")
 
+def plotRedundanceCounts(redundance_counts_csv):
+    print("Plotting redundance counts from " +
+          redundance_counts_csv + " in " + config.CSV_PATH)
+    df = pd.read_csv(os.path.join(config.CSV_PATH, redundance_counts_csv))
+    plots.plotRedundanceCounts(df)
+    print("Plot created")
 
 
 def filterColumns(header):
-    #Always include time that is in the first position
-    columns_filter=[header[0]]
+    # Always include time that is in the first position
+    columns_filter = [header[0]]
     print("Using "+header[0]+" column")
     for i in range(1, len(header), 2):
         print("Use "+header[i]+" ,discard "+header[i+1])
@@ -161,9 +171,50 @@ def uploadToDatabase(folder_path, csv_filter):
     list_files = df_filtered['name'].tolist()
     num_files = len(list_files)
     print("Uploading to database")
-    failed_files = calculate_time(database_func.uploadToDatabase)(folder_path, columns_filter, list_files)
+    failed_files = utils_func.calculate_time(database_func.uploadToDatabase)(
+        folder_path, columns_filter, list_files)
     if failed_files:
         print("Failed files: "+str(failed_files))
     else:
         print("No failed files")
     print("Files uploaded to database: "+str(num_files-len(failed_files)))
+
+
+def summaryDescriptiveStats(path, output_file_name):
+    print("Creating descriptive stats in path "+path)
+    utils_func.calculate_time(summary_func.summary_descriptive_stats)(
+        path, output_file_name)
+    print("Creating "+output_file_name+" as output")
+
+
+def deleteFilter(name_filter):
+    dict_filter.deleteFilter(name_filter)
+    print("Filter", name_filter, "deleted")
+
+
+def AddFilterBySize(csv_file):
+    print("Adding filter of ones in from "+csv_file)
+    try:
+        df = pd.read_csv(os.path.join(config.CSV_PATH, csv_file))
+    except Exception as e:
+        print("Error reading csv file: "+str(e))
+        return
+    # Filter the ones
+    df = df[df['ones'] > 0]
+    # Add the filter
+
+    dict_filter.addFilter(df, "SmallFiles")
+
+def summaryInconInconsistencies(path, output_file_name):
+    ##Pepe
+    print("Creating Inconsistencies stats in path "+path)
+    utils_func.calculate_time(summary_func.summary_inconsistencies)(
+        path, output_file_name)
+    print("Creating "+output_file_name+" as output")
+
+def plotInconsistencies(redundance_csv):
+    print("Plotting inconsistencies from " +
+            redundance_csv + " in " + config.CSV_PATH)
+    df = pd.read_csv(os.path.join(config.CSV_PATH, redundance_csv))
+    plots.plotInconsistenciesPer(df)
+    print("Plot created")

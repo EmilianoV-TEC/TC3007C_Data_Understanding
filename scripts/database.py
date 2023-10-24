@@ -30,7 +30,7 @@ def uploadToDatabase(folder_path, columns_filter, list_files):
             print(f"Error al procesar el archivo {file}: {str(e)}")
             failed_files.append(file)
     # Cerrar la conexión con la base de datos
-    df_database.to_csv("database.csv")
+    df_database.to_csv("database.csv", index=False)
     print("Database created")
     print(df_database.describe())
     return failed_files

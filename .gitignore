@@ -1,0 +1,8 @@
+# Ignora la carpeta _pycache_
+__pycache__/ 
+
+# Ignora la carpeta test_data
+test_data/
+
+# Ignora el archivo redundance.csv
+redundance.csv
